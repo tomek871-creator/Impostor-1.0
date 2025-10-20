@@ -1,86 +1,92 @@
-from flask import Flask, request, redirect, url_for, render_template_string
+from flask import Flask, request, render_template_string
 import random
-import string
 
 app = Flask(__name__)
 
-# ===============================
-# USTAWIENIA GRY
-# ===============================
-
-# Lista słów (możesz rozbudować)
-WORDS = [
-    "kot", "pies", "rower", "samolot", "słońce", "księżyc", "telefon", "komputer", "las", "morze",
-    "góry", "miasto", "dom", "krzesło", "kawa", "herbata", "jabłko", "banan", "samochód", "muzyka",
-    "kino", "szkoła", "ogród", "śnieg", "deszcz", "chleb", "ryba", "zegarek", "długopis", "pociąg"
-]
-
-# Pokoje gier
 games = {}
 
-# ===============================
-# STRONA GŁÓWNA
-# ===============================
+WORDS = [
+    "kot", "pies", "dom", "las", "morze", "telefon", "samochód",
+    "szkoła", "jabłko", "krzesło", "gitara", "muzyka", "komputer",
+    "pociąg", "rower", "pizza", "książka", "kawa", "film", "okno"
+]
+
+# ----------------------- STRONA GŁÓWNA -----------------------
 @app.route("/")
 def index():
     return render_template_string("""
     <html>
     <head>
-        <title>Impostor Game</title>
+        <title>Impostor Game 🎭</title>
         <style>
-            body { background-color: #121212; color: #f0f0f0; font-family: Arial; text-align: center; margin-top: 10%; }
+            body { background-color: #121212; color: white; text-align: center; font-family: Arial; margin-top: 10%; }
             input, button { padding: 10px; border-radius: 8px; border: none; margin: 5px; }
-            button { background-color: #3f51b5; color: white; cursor: pointer; }
-            button:hover { background-color: #5c6bc0; }
-            .box { background-color: #1e1e1e; padding: 20px; border-radius: 10px; display: inline-block; }
+            input { width: 200px; }
+            button { background-color: #03a9f4; color: white; cursor: pointer; }
+            button:hover { background-color: #0288d1; }
+            .box { background-color: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; }
         </style>
     </head>
     <body>
         <div class="box">
             <h1>🎭 Impostor Game</h1>
             <form action="/create" method="post">
-                <input name="room" placeholder="Podaj kod pokoju (np. TEAM5)" required>
-                <button type="submit">Stwórz pokój</button>
+                <p>Podaj kod pokoju (np. TEAM5):</p>
+                <input name="room" placeholder="Kod pokoju" required>
+                <button type="submit">🆕 Stwórz grę</button>
             </form>
-            <form action="/join" method="post">
-                <input name="room" placeholder="Dołącz do pokoju" required>
-                <button type="submit">Dołącz</button>
+            <hr style="margin: 20px 0; opacity: 0.3;">
+            <form action="/room" method="get">
+                <p>Lub dołącz do istniejącego pokoju:</p>
+                <input name="room" placeholder="Kod pokoju" required>
+                <button type="submit">➡️ Dołącz</button>
             </form>
         </div>
     </body>
     </html>
     """)
 
-# ===============================
-# TWORZENIE POKOJU
-# ===============================
+# ----------------------- TWORZENIE GRY -----------------------
 @app.route("/create", methods=["POST"])
 def create_game():
-    room = request.form["room"].upper().strip()
+    room = request.form["room"].strip().upper()
     if not room:
-        return redirect(url_for("index"))
-    word = random.choice(WORDS)
+        return "❌ Podaj kod pokoju!"
+
+    if room in games:
+        return f"❌ Pokój {room} już istnieje."
+
     games[room] = {
+        "word": random.choice(WORDS),
         "players": [],
-        "word": word,
         "impostor": None
     }
-    return redirect(url_for("join_room", room=room))
 
-# ===============================
-# DOŁĄCZANIE DO POKOJU
-# ===============================
-@app.route("/join", methods=["POST"])
-def join():
-    room = request.form["room"].upper().strip()
-    if room not in games:
-        return "❌ Pokój nie istnieje. Wróć i utwórz nowy."
-    return redirect(url_for("join_room", room=room))
+    return render_template_string(f"""
+    <html><body style="text-align:center; font-family:Arial; margin-top:10%">
+        <h2>✅ Pokój {room} utworzony!</h2>
+        <p>Podziel się tym kodem ze znajomymi.</p>
+        <a href="/room/{room}">➡️ Przejdź do pokoju</a>
+    </body></html>
+    """)
 
+# ----------------------- WEJŚCIE DO POKOJU -----------------------
 @app.route("/room/<room>")
 def join_room(room):
     if room not in games:
         return "❌ Pokój nie istnieje."
+
+    game = games[room]
+    players = len(game["players"])
+
+    if players >= 8:
+        return render_template_string(f"""
+        <html><body style="text-align:center; font-family:Arial; margin-top:10%">
+            <h2>🛑 Pokój {room} jest pełny (8/8 graczy).</h2>
+            <a href="/">⬅️ Wróć</a>
+        </body></html>
+        """)
+
     return render_template_string(f"""
     <html>
     <head>
@@ -96,6 +102,7 @@ def join_room(room):
     <body>
         <div class="box">
             <h2>Pokój: {room}</h2>
+            <p>Graczy w pokoju: {players}/8</p>
             <form action="/play/{room}" method="post">
                 <input name="player" placeholder="Twoje imię" required>
                 <button type="submit">Dołącz i zobacz słowo</button>
@@ -105,22 +112,33 @@ def join_room(room):
     </html>
     """)
 
-# ===============================
-# START GRY – WYŚWIETLENIE SŁOWA
-# ===============================
+# ----------------------- ROZPOCZĘCIE GRY -----------------------
 @app.route("/play/<room>", methods=["POST"])
 def play(room):
     if room not in games:
         return "❌ Pokój nie istnieje."
     
-    player = request.form["player"]
+    player = request.form["player"].strip()
     game = games[room]
+
+    if len(game["players"]) >= 8 and player not in game["players"]:
+        return f"❌ Pokój {room} jest pełny (8/8 graczy)."
 
     if player not in game["players"]:
         game["players"].append(player)
 
+    # Start gry dopiero od 3 graczy
     if len(game["players"]) >= 3 and game["impostor"] is None:
         game["impostor"] = random.choice(game["players"])
+
+    if len(game["players"]) < 3:
+        return render_template_string(f"""
+        <html><body style="text-align:center; font-family:Arial; margin-top:15%">
+            <h2>🕐 Czekamy na więcej graczy...</h2>
+            <p>W pokoju {len(game["players"])}/3+</p>
+            <a href="/room/{room}">🔁 Odśwież</a>
+        </body></html>
+        """)
 
     if player == game["impostor"]:
         word = "IMPOSTOR"
@@ -149,9 +167,7 @@ def play(room):
     </html>
     """)
 
-# ===============================
-# NOWA RUNDA
-# ===============================
+# ----------------------- NOWA RUNDA -----------------------
 @app.route("/new_round/<room>", methods=["POST"])
 def new_round(room):
     if room not in games:
@@ -159,12 +175,16 @@ def new_round(room):
     
     game = games[room]
     game["word"] = random.choice(WORDS)
-    if len(game["players"]) >= 3:
-        game["impostor"] = random.choice(game["players"])
-    return redirect(url_for("join_room", room=room))
+    game["impostor"] = random.choice(game["players"])
+    
+    return render_template_string(f"""
+    <html><body style="text-align:center; font-family:Arial; margin-top:10%">
+        <h2>🔄 Nowa runda w pokoju {room}!</h2>
+        <p>Impostor i słowo zostały zmienione.</p>
+        <a href="/room/{room}">➡️ Wracaj do gry</a>
+    </body></html>
+    """)
 
-# ===============================
-# START SERWERA
-# ===============================
+# ----------------------- START APLIKACJI -----------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=5000)
