@@ -1,8 +1,9 @@
-from flask import Flask, request, render_template_string, redirect, url_for
+from flask import Flask, request, render_template_string
 import random
 
 app = Flask(__name__)
 
+# ----------------------- DANE GRY -----------------------
 games = {}
 
 WORDS = [
@@ -44,10 +45,9 @@ WORDS = [
     "porażka", "walka", "gra", "zabawa", "zwycięstwo", "nagroda", "prezent", "niespodzianka", "święta", "urodziny",
     "impreza", "taniec", "muzyka", "zabawa", "ciasto", "balony", "dekoracje", "świeczki", "życzenia", "goście",
     "rodzina", "rodzice", "dziecko", "brat", "siostra", "dziadek", "babcia", "wujek", "ciocia", "kuzyn",
-    "przyjaciel", "kolega", "znajomy", "sąsiad", "dziecko", "uczeń", "student", "nauczyciel", "doktor", "pielęgniarka",
+    "przyjaciel", "kolega", "znajomy", "sąsiad", "student", "nauczyciel", "doktor", "pielęgniarka",
     "lekarz", "dentysta", "weterynarz", "policjant", "strażak", "żołnierz", "pilot", "kelner", "kucharz", "mechanik",
     "informatyk", "programista", "sprzedawca", "muzyk", "malarz", "aktor", "pisarz", "reżyser", "fotograf", "naukowiec"
-
 ]
 
 # ----------------------- STRONA GŁÓWNA -----------------------
@@ -60,7 +60,7 @@ def index():
         <style>
             body { background-color: #121212; color: white; text-align: center; font-family: Arial; margin-top: 10%; }
             input, button { padding: 10px; border-radius: 8px; border: none; margin: 5px; }
-            input { width: 200px; text-transform: uppercase; }
+            input { width: 200px; }
             button { background-color: #03a9f4; color: white; cursor: pointer; }
             button:hover { background-color: #0288d1; }
             .box { background-color: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; }
@@ -75,7 +75,7 @@ def index():
                 <button type="submit">🆕 Stwórz grę</button>
             </form>
             <hr style="margin: 20px 0; opacity: 0.3;">
-            <form onsubmit="event.preventDefault(); window.location.href='/room/' + this.room.value.toUpperCase();">
+            <form action="/room" method="get">
                 <p>Lub dołącz do istniejącego pokoju:</p>
                 <input name="room" placeholder="Kod pokoju" required>
                 <button type="submit">➡️ Dołącz</button>
@@ -96,7 +96,7 @@ def create_game():
         return f"❌ Pokój {room} już istnieje."
 
     games[room] = {
-        "word": random.choice(WORDS),
+        "word": None,
         "players": [],
         "impostor": None
     }
@@ -104,8 +104,7 @@ def create_game():
     return render_template_string(f"""
     <html><body style="text-align:center; font-family:Arial; margin-top:10%">
         <h2>✅ Pokój {room} utworzony!</h2>
-        <p>Podziel się tym linkiem ze znajomymi:</p>
-        <p><b>{{{{ request.host_url }}}}room/{room}</b></p>
+        <p>Podziel się tym kodem ze znajomymi.</p>
         <a href="/room/{room}">➡️ Przejdź do pokoju</a>
     </body></html>
     """)
@@ -113,7 +112,6 @@ def create_game():
 # ----------------------- WEJŚCIE DO POKOJU -----------------------
 @app.route("/room/<room>")
 def join_room(room):
-    room = room.upper()
     if room not in games:
         return "❌ Pokój nie istnieje."
 
@@ -156,21 +154,17 @@ def join_room(room):
 # ----------------------- ROZPOCZĘCIE GRY -----------------------
 @app.route("/play/<room>", methods=["POST"])
 def play(room):
-    room = room.upper()
     if room not in games:
         return "❌ Pokój nie istnieje."
     
     player = request.form["player"].strip()
     game = games[room]
 
-    if len(game["players"]) >= 8 and player not in game["players"]:
-        return f"❌ Pokój {room} jest pełny (8/8 graczy)."
-
     if player not in game["players"]:
         game["players"].append(player)
 
-    # Start gry dopiero od 3 graczy
     if len(game["players"]) >= 3 and game["impostor"] is None:
+        game["word"] = random.choice(WORDS)
         game["impostor"] = random.choice(game["players"])
 
     if len(game["players"]) < 3:
@@ -182,7 +176,10 @@ def play(room):
         </body></html>
         """)
 
-    word = "IMPOSTOR" if player == game["impostor"] else game["word"]
+    if player == game["impostor"]:
+        word = "IMPOSTOR"
+    else:
+        word = game["word"]
 
     return render_template_string(f"""
     <html>
@@ -200,6 +197,7 @@ def play(room):
         <p>Twoje słowo:</p>
         <p class="word">{word}</p>
         <form action="/new_round/{room}" method="post">
+            <input type="hidden" name="player" value="{player}">
             <button type="submit">🔁 Zagraj ponownie</button>
         </form>
     </body>
@@ -209,23 +207,42 @@ def play(room):
 # ----------------------- NOWA RUNDA -----------------------
 @app.route("/new_round/<room>", methods=["POST"])
 def new_round(room):
-    room = room.upper()
     if room not in games:
         return "❌ Pokój nie istnieje."
-    
+
     game = games[room]
+    player = request.form["player"]
+
+    if player not in game["players"]:
+        game["players"].append(player)
+
     game["word"] = random.choice(WORDS)
     game["impostor"] = random.choice(game["players"])
-    
+
+    if player == game["impostor"]:
+        word = "IMPOSTOR"
+    else:
+        word = game["word"]
+
     return render_template_string(f"""
-    <html><body style="text-align:center; font-family:Arial; margin-top:10%">
-        <h2>🔄 Nowa runda w pokoju {room}!</h2>
-        <p>Impostor i słowo zostały zmienione.</p>
-        <a href="/room/{room}">➡️ Wracaj do gry</a>
-    </body></html>
+    <html>
+    <head>
+        <title>Nowa runda</title>
+        <style>
+            body {{ background-color: #000; color: #fff; text-align: center; font-family: Arial; margin-top: 15%; }}
+            .word {{ font-size: 2em; color: #4caf50; }}
+            a {{ display: inline-block; margin-top: 20px; color: #03a9f4; text-decoration: none; }}
+        </style>
+    </head>
+    <body>
+        <h1>Gracz: {player}</h1>
+        <p>Twoje słowo:</p>
+        <p class="word">{word}</p>
+        <a href="/room/{room}">⬅️ Wróć do pokoju</a>
+    </body>
+    </html>
     """)
 
 # ----------------------- START APLIKACJI -----------------------
 if __name__ == "__main__":
-    # Ustaw host na 0.0.0.0, żeby Flask był dostępny z zewnątrz
     app.run(host="0.0.0.0", port=5000)
