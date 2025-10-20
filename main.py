@@ -92,8 +92,7 @@ def index():
 
         return redirect(url_for("lobby", game_id=game_id))
 
-    return render_template_string(PAGE_TEMPLATE + """
-    {% block content %}
+    return render_template_string(PAGE_TEMPLATE.replace("{% block content %}{% endblock %}", """
     <h1>🎮 Impostor — Gra słowna</h1>
     <form method="POST">
         <p>Podaj liczbę graczy (3–8):</p>
@@ -101,8 +100,8 @@ def index():
         <br>
         <button type="submit">Stwórz grę</button>
     </form>
-    {% endblock %}
-    """)
+    """))
+
 
 # --- Lobby gry (link do udostępnienia graczom) ---
 @app.route("/lobby/<game_id>")
