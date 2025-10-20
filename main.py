@@ -1,156 +1,178 @@
-from flask import Flask, render_template_string, request, redirect, url_for, jsonify
-import random, json, os
+from flask import Flask, request, render_template_string, redirect, make_response
+import random, json, os, uuid
 
 app = Flask(__name__)
+DATA_FILE = "games.json"
 
-DATA_FILE = "/tmp/games.json"
 
-# Funkcja wczytująca i zapisująca dane z pliku
+# ----------------- Pomocnicze funkcje -----------------
 def load_games():
-    if os.path.exists(DATA_FILE):
+    if not os.path.exists(DATA_FILE):
+        return {}
+    try:
         with open(DATA_FILE, "r") as f:
-            try:
-                return json.load(f)
-            except:
-                return {}
-    return {}
+            return json.load(f)
+    except json.JSONDecodeError:
+        return {}
 
-def save_games(games):
+
+def save_games(data):
     with open(DATA_FILE, "w") as f:
-        json.dump(games, f)
+        json.dump(data, f)
 
-# Lista słów (50% prostych, 50% poważniejszych)
+
+# ----------------- Lista słów -----------------
 WORDS = [
-    "pies", "kot", "rower", "góra", "las", "morze", "zamek", "tęcza", "dinozaur", "robot",
-    "księżyc", "chmura", "lampa", "okno", "szkoła", "telefon", "kwiat", "piłka", "muzyka", "góra lodowa",
-    "samolot", "statek", "książka", "komputer", "drzewo", "słońce", "gwiazda", "magnes", "klucz", "drzwi",
-    "mikroskop", "nauczyciel", "historia", "wolność", "sztuka", "architektura", "nauka", "filozofia", "muzeum", "społeczeństwo",
-    "teoria", "wynalazek", "matematyka", "astronomia", "prawo", "biologia", "psychologia", "kultura", "edukacja", "odpowiedzialność"
+    "pies","kot","rower","zamek","tęcza","robot","księżyc","szkoła","telefon","piłka",
+    "muzyka","drzewo","słońce","gwiazda","klucz","okno","samolot","książka","komputer","morze",
+    "mikroskop","nauczyciel","historia","wolność","sztuka","architektura","nauka","filozofia","muzeum","społeczeństwo",
+    "teoria","wynalazek","matematyka","astronomia","prawo","biologia","psychologia","kultura","edukacja","odpowiedzialność"
 ]
 
-games = load_games()
 
+# ----------------- Strona główna -----------------
 @app.route("/")
 def index():
     return render_template_string("""
-    <html>
-    <head><title>Gra - Kim jest Impostorem?</title></head>
-    <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-        <h1>Kim jest Impostorem?</h1>
+    <html><body style="text-align:center;font-family:sans-serif;margin-top:10%;">
+        <h1>🎭 Kim jest Impostorem?</h1>
         <form action="/create" method="post">
-            <button type="submit">Utwórz pokój</button>
+            <button type="submit">🆕 Stwórz pokój</button>
         </form>
         <hr>
-        <form action="/join" method="post">
-            <input name="code" placeholder="Kod pokoju" required>
-            <button type="submit">Dołącz</button>
+        <form action="/room" method="get">
+            <input name="room" placeholder="Kod pokoju" required>
+            <button type="submit">➡️ Dołącz</button>
         </form>
     </body></html>
     """)
 
+
+# ----------------- Tworzenie pokoju -----------------
 @app.route("/create", methods=["POST"])
-def create_room():
+def create_game():
     games = load_games()
     code = ''.join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=5))
     games[code] = {
-        "players": [],
         "word": random.choice(WORDS),
+        "players": [],
         "impostor": None,
-        "started": False
+        "started": False,
+        "host": None
     }
     save_games(games)
-    return redirect(url_for("lobby", code=code, host=1))
+    return redirect(f"/room/{code}")
 
-@app.route("/join", methods=["POST"])
-def join_room():
-    code = request.form["code"].strip().upper()
+
+# ----------------- Dołączanie do pokoju -----------------
+@app.route("/room/<room>")
+def join_room(room):
     games = load_games()
-    if code not in games:
-        return "Nie znaleziono pokoju", 404
-    return redirect(url_for("lobby", code=code))
+    if room not in games:
+        return "❌ Pokój nie istnieje."
 
-@app.route("/lobby/<code>")
-def lobby(code):
-    host = request.args.get("host")
-    return render_template_string("""
+    game = games[room]
+
+    # pobierz lub utwórz unikalny identyfikator gracza
+    player_id = request.cookies.get("player_id")
+    if not player_id:
+        player_id = str(uuid.uuid4())
+
+    # przypisz hosta, jeśli to pierwszy gracz
+    if game["host"] is None:
+        game["host"] = player_id
+
+    # dodaj gracza, jeśli go nie ma
+    if player_id not in game["players"]:
+        game["players"].append(player_id)
+        save_games(games)
+
+    players = len(game["players"])
+    is_host = (player_id == game["host"])
+
+    # jeśli gra już wystartowała, przekieruj do słowa
+    if game["started"]:
+        resp = make_response(redirect(f"/play/{room}"))
+        resp.set_cookie("player_id", player_id)
+        return resp
+
+    start_button = ""
+    if is_host:
+        start_button = f"""
+        <form action="/start/{room}" method="post">
+            <button type="submit" style="padding:10px 20px;font-size:18px;">🚀 Start gry</button>
+        </form>
+        """
+
+    html = f"""
     <html>
     <head>
-        <title>Lobby {{code}}</title>
-        <script>
-        function refreshLobby() {
-            fetch("/lobby_data/{{code}}")
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById("players").innerText = data.players + " graczy w lobby";
-                    if (data.started) window.location = "/game/{{code}}";
-                });
-        }
-        setInterval(refreshLobby, 2000);
-        </script>
+        <meta http-equiv="refresh" content="3">
     </head>
-    <body style="text-align: center; font-family: sans-serif; padding-top: 50px;">
-        <h1>Pokój: {{code}}</h1>
-        <p id="players">Ładowanie...</p>
-        {% if host %}
-        <form action="/start/{{code}}" method="post">
-            <button type="submit">Rozpocznij grę</button>
-        </form>
-        {% endif %}
-        <script>refreshLobby()</script>
+    <body style="text-align:center;font-family:sans-serif;margin-top:10%;">
+        <h2>Pokój: {room}</h2>
+        <p>Graczy w pokoju: {players}</p>
+        {"<p>Jesteś hostem 👑</p>" if is_host else ""}
+        {start_button}
+        <p>Oczekiwanie na rozpoczęcie gry...</p>
     </body></html>
-    """, code=code, host=host)
+    """
 
-@app.route("/lobby_data/<code>")
-def lobby_data(code):
-    games = load_games()
-    game = games.get(code)
-    if not game:
-        return jsonify({"error": "not found"}), 404
-    # Dodaj gracza jeśli nie istnieje w lobby
-    ip = request.remote_addr
-    if ip not in game["players"] and not game["started"]:
-        game["players"].append(ip)
-        save_games(games)
-    return jsonify({
-        "players": len(game["players"]),
-        "started": game["started"]
-    })
+    resp = make_response(html)
+    resp.set_cookie("player_id", player_id)
+    return resp
 
-@app.route("/start/<code>", methods=["POST"])
-def start_game(code):
+
+# ----------------- Host startuje grę -----------------
+@app.route("/start/<room>", methods=["POST"])
+def start_game(room):
     games = load_games()
-    game = games.get(code)
-    if not game:
-        return "Nie znaleziono pokoju", 404
+    if room not in games:
+        return "❌ Pokój nie istnieje."
+
+    game = games[room]
+    player_id = request.cookies.get("player_id")
+
+    if player_id != game["host"]:
+        return redirect(f"/room/{room}")
+
     if len(game["players"]) < 3:
-        return "Za mało graczy (min. 3).", 400
+        return f"<h3>❌ Potrzeba co najmniej 3 graczy, aby rozpocząć grę.</h3><a href='/room/{room}'>⬅️ Powrót</a>"
+
     game["impostor"] = random.choice(game["players"])
     game["started"] = True
     save_games(games)
-    return redirect(url_for("game", code=code))
 
-@app.route("/game/<code>")
-def game(code):
+    return redirect(f"/play/{room}")
+
+
+# ----------------- Ekran ze słowem -----------------
+@app.route("/play/<room>")
+def play(room):
     games = load_games()
-    game = games.get(code)
-    if not game:
-        return "Pokój nie istnieje", 404
-    ip = request.remote_addr
-    if ip not in game["players"]:
-        return "Nie jesteś w tej grze", 403
-    if game["impostor"] == ip:
-        word = "❓ Jesteś IMPOSTOREM! Spróbuj udawać, że znasz słowo."
-    else:
-        word = f"🔤 Słowo: {game['word']}"
+    if room not in games:
+        return "❌ Pokój nie istnieje."
+
+    game = games[room]
+    player_id = request.cookies.get("player_id")
+
+    if player_id not in game["players"]:
+        return redirect(f"/room/{room}")
+
+    if not game["started"]:
+        return redirect(f"/room/{room}")
+
+    word = "IMPOSTOR" if player_id == game["impostor"] else game["word"]
+
     return render_template_string(f"""
-    <html>
-    <head><title>Gra - {code}</title></head>
-    <body style="text-align: center; font-family: sans-serif; padding-top: 50px;">
-        <h2>Pokój: {code}</h2>
-        <p>{word}</p>
-        <p>Ustalcie kto jest impostorem!</p>
+    <html><body style="text-align:center;font-family:sans-serif;margin-top:10%;">
+        <h2>Twoje słowo:</h2>
+        <h1 style="color:#4caf50;">{word}</h1>
+        <p>Nie pokazuj innym! 😎</p>
+        <a href="/room/{room}">⬅️ Powrót do lobby</a>
     </body></html>
     """)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
