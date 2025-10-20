@@ -1,214 +1,129 @@
-from flask import Flask, request, redirect, render_template_string, jsonify, make_response
+from flask import Flask, render_template_string, request, redirect, url_for
 import random
 import string
 
 app = Flask(__name__)
 
-# ===============================
-#  LISTA SŁÓW (50% prostych, 50% poważniejszych)
-# ===============================
+# --- LISTA SŁÓW ---
 WORDS = [
-    # proste
-    "pies", "kot", "rower", "las", "telefon", "szkoła", "książka", "pociąg", "cukierek", "chmura",
-    "morze", "zamek", "samolot", "kwiat", "miasto", "komputer", "pudełko", "zegarek", "słońce", "śnieg",
-    "muzyka", "ulica", "auto", "długopis", "okno", "krzesło", "stół", "jabłko", "drzewo", "zupa",
-    "ryba", "król", "królowa", "ogród", "pociąg", "plecak", "szalik", "czapka", "piłka", "piesek",
-    "most", "dom", "góra", "kawa", "herbata", "zegar", "film", "obraz", "sklep", "buty",
-    # poważniejsze
-    "wolność", "technologia", "sprawiedliwość", "ambicja", "historia", "dyplomacja", "emocje", "odwaga", "strategia", "wiedza",
-    "filozofia", "mechanika", "społeczeństwo", "komunikacja", "ekonomia", "fizyka", "energia", "polityka", "muzeum", "inspiracja",
-    "relacja", "kultura", "sztuka", "matematyka", "psychologia", "biologia", "muzykologia", "świadomość", "analiza", "astronomia",
-    "cywilizacja", "innowacja", "wartość", "honor", "dyscyplina", "motywacja", "organizacja", "równość", "empatia", "odpowiedzialność",
-    "współpraca", "przyjaźń", "rozsądek", "edukacja", "wspólnota", "przyszłość", "autorytet", "badania", "technika", "etyka"
+    "pies", "kot", "samochód", "książka", "telefon", "komputer", "drzewo", "krzesło", "kwiat", "morze",
+    "szkoła", "film", "pociąg", "samolot", "księżyc", "słońce", "muzyka", "las", "dom", "buty",
+    "pociąg", "szpital", "muzeum", "ogród", "taniec", "mleko", "ryba", "rower", "talerz", "lampa",
+    "kosmos", "podróż", "ciasto", "kuchnia", "miasto", "wieża", "teatr", "kościół", "rzeka", "burza",
+    "minister", "nauczyciel", "architekt", "dokument", "system", "ekonomia", "konflikt", "prawo", "wolność", "kultura",
+    "strategia", "dyskusja", "społeczeństwo", "nauka", "technologia", "projekt", "artysta", "poeta", "muzyk", "aktor"
 ]
 
-# ===============================
-#  DANE GIER (trzymane w RAM)
-# ===============================
+# --- DANE O GRACH ---
 games = {}
 
-# ===============================
-#  STRONA GŁÓWNA
-# ===============================
+# --- STRONA GŁÓWNA ---
 @app.route("/")
 def index():
     return render_template_string("""
-    <html>
-    <head>
-        <title>Impostor Game 🎭</title>
-        <style>
-            body { background-color: #121212; color: white; text-align: center; font-family: Arial; margin-top: 10%; }
-            input, button { padding: 10px; border-radius: 8px; border: none; margin: 5px; }
-            input { width: 200px; }
-            button { background-color: #03a9f4; color: white; cursor: pointer; }
-            button:hover { background-color: #0288d1; }
-            .box { background-color: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; }
-        </style>
-    </head>
-    <body>
-        <div class="box">
-            <h1>🎭 Impostor Game</h1>
-
-            <form id="createForm" action="/create" method="post">
-                <p>Wpisz kod pokoju (opcjonalnie) lub zostaw puste, aby wylosować:</p>
-                <input name="room" placeholder="Kod pokoju (opcjonalnie)">
-                <button type="submit">🆕 Stwórz pokój</button>
-            </form>
-
-            <hr style="margin: 20px 0; opacity: 0.3;">
-
-            <p>Lub dołącz do istniejącego pokoju:</p>
-            <form id="joinForm" onsubmit="event.preventDefault(); 
-                        const code = document.querySelector('[name=join_room]').value.trim().toUpperCase();
-                        if(!code) return alert('Podaj kod pokoju');
-                        window.location = '/room/' + encodeURIComponent(code);">
-                <input name="join_room" placeholder="Kod pokoju" required>
-                <button type="submit">➡️ Dołącz</button>
-            </form>
-        </div>
-    </body>
-    </html>
+    <h1>Gra: Impostor</h1>
+    <form action="/create" method="post">
+        <button type="submit">Utwórz pokój</button>
+    </form>
+    <br>
+    <form action="/room" method="post">
+        <input type="text" name="room" placeholder="Kod pokoju" required>
+        <button type="submit">Dołącz</button>
+    </form>
     """)
 
-# ===============================
-#  TWORZENIE POKOJU
-# ===============================
+# --- UTWORZENIE POKOJU ---
 @app.route("/create", methods=["POST"])
-def create_game():
-    given = request.form.get("room", "").strip().upper()
-    if given:
-        room = given
-    else:
-        room = ''.join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=5))
+def create():
+    code = ''.join(random.choices(string.ascii_uppercase, k=4))
+    games[code] = {"players": [], "started": False, "word": None, "impostor": None}
+    return redirect(f"/room/{code}?host=1")
 
-    while room in games:
-        room = ''.join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=5))
+# --- BEZPIECZNE DOŁĄCZENIE (naprawia 'Not Found') ---
+@app.route("/room", methods=["GET", "POST"])
+@app.route("/room/", methods=["GET", "POST"])
+def room_redirect():
+    code = ""
+    if request.method == "POST":
+        code = (request.form.get("room") or "").strip().upper()
+    if not code:
+        code = (request.args.get("room") or "").strip().upper()
+    if not code:
+        return redirect("/")
+    return redirect(f"/room/{code}")
 
-    games[room] = {
-        "word": random.choice(WORDS),
-        "players": [],
-        "impostor": None,
-        "started": False
-    }
+# --- STRONA POKOJU ---
+@app.route("/room/<code>")
+def room(code):
+    host = request.args.get("host") == "1"
 
-    link = request.host_url.rstrip("/") + f"/room/{room}"
-    return render_template_string(f"""
-    <html><body style="font-family:Arial;text-align:center;margin-top:40px;">
-        <h2>✅ Pokój utworzony: {room}</h2>
-        <p>Wyślij ten link znajomym:</p>
-        <p><a href="{link}">{link}</a></p>
-        <p><a href="/">⬅️ Powrót</a></p>
-    </body></html>
-    """)
+    if code not in games:
+        return "Pokój nie istnieje."
 
-# ===============================
-#  WEJŚCIE DO POKOJU
-# ===============================
-@app.route("/room/<room>")
-def room_page(room):
-    if room not in games:
-        return f"❌ Pokój {room} nie istnieje", 404
+    game = games[code]
 
-    res = make_response(render_template_string("""
-    <html>
-    <head>
-        <title>Pokój {{ room }}</title>
-        <style>
-            body { background:#111; color:white; font-family:Arial; text-align:center; margin-top:5%; }
-            button { background:#03a9f4; border:none; color:white; padding:10px 20px; border-radius:8px; cursor:pointer; }
-            button:hover { background:#0288d1; }
-            #players { margin-top:20px; }
-        </style>
-    </head>
-    <body>
-        <h1>Pokój {{ room }}</h1>
-        <p id="status">Oczekiwanie na rozpoczęcie gry...</p>
-        <div id="players"></div>
-        <button id="startBtn" onclick="startGame()">▶️ Start</button>
-
-        <script>
-        const room = "{{ room }}";
-        document.cookie = "player_id=" + Math.random().toString(36).substring(2);
-
-        async function refresh() {
-            const r = await fetch("/status/" + room);
-            const data = await r.json();
-            document.getElementById("players").innerHTML = "<p>Gracze: " + data.players.length + "</p>";
-
-            if (data.started) {
-                window.location = "/play/" + room;
-            }
-
-            setTimeout(refresh, 2000);
-        }
-        refresh();
-
-        async function startGame() {
-            await fetch("/start/" + room);
-            window.location = "/play/" + room;
-        }
-        </script>
-    </body>
-    </html>
-    """, room=room))
-    res.set_cookie("room", room)
-    return res
-
-# ===============================
-#  STATUS GRY
-# ===============================
-@app.route("/status/<room>")
-def status(room):
-    game = games.get(room)
-    if not game:
-        return jsonify({"error": "no_room"}), 404
-    return jsonify({"players": game["players"], "started": game["started"]})
-
-# ===============================
-#  START GRY
-# ===============================
-@app.route("/start/<room>")
-def start(room):
-    game = games.get(room)
-    if not game or game["started"]:
-        return "❌ Gra już trwa lub pokój nie istnieje", 400
-
-    players = game["players"]
-    if len(players) < 3:
-        return "❌ Potrzeba co najmniej 3 graczy", 400
-
-    impostor = random.choice(players)
-    game["impostor"] = impostor
-    game["started"] = True
-    return "✅ Gra rozpoczęta!"
-
-# ===============================
-#  ROZGRYWKA
-# ===============================
-@app.route("/play/<room>")
-def play(room):
-    player_id = request.cookies.get("player_id")
-    game = games.get(room)
-    if not game:
-        return "❌ Pokój nie istnieje", 404
-
-    # jeśli gracz jeszcze nie jest na liście — dopisz
+    # Rejestracja gracza
+    player_id = request.remote_addr  # unikalne ID = adres IP
     if player_id not in game["players"]:
         game["players"].append(player_id)
 
-    # losowanie słowa
-    word = game["word"] if player_id != game["impostor"] else "INNE SŁOWO (impostor)"
+    # Jeśli gra już się zaczęła
+    if game["started"]:
+        impostor = game["impostor"]
+        if player_id == impostor:
+            word = game["word_impostor"]
+        else:
+            word = game["word"]
+        return render_template_string(f"""
+            <h2>Gra rozpoczęta!</h2>
+            <p>Twoje słowo: <b>{word}</b></p>
+        """)
 
-    return render_template_string("""
-    <html><body style="font-family:Arial;text-align:center;margin-top:10%;">
-        <h2>Twoje słowo:</h2>
-        <h1 style="font-size:50px;">{{ word }}</h1>
-        <p>Nie pokazuj nikomu!</p>
-    </body></html>
-    """, word=word)
+    # Jeśli jeszcze nie zaczęła
+    player_count = len(game["players"])
+    players_text = "<br>".join([f"Gracz {i+1}" for i in range(player_count)])
+    start_button = ""
+    if host:
+        start_button = f"""
+            <form action="/start/{code}" method="post">
+                <button type="submit">Rozpocznij grę</button>
+            </form>
+        """
 
-# ===============================
-#  URUCHOMIENIE
-# ===============================
+    return render_template_string(f"""
+        <h2>Pokój: {code}</h2>
+        <p>Liczba graczy: {player_count}</p>
+        {players_text}
+        <br>
+        {start_button}
+        <br>
+        <form method="get" action="/room/{code}">
+            <button type="submit">Odśwież</button>
+        </form>
+    """)
+
+# --- ROZPOCZĘCIE GRY ---
+@app.route("/start/<code>", methods=["POST"])
+def start(code):
+    if code not in games:
+        return "Błąd: pokój nie istnieje."
+
+    game = games[code]
+    if len(game["players"]) < 3:
+        return "Potrzeba co najmniej 3 graczy!"
+
+    # Losowanie słów i impostora
+    impostor = random.choice(game["players"])
+    normal_word = random.choice(WORDS)
+    impostor_word = random.choice([w for w in WORDS if w != normal_word])
+
+    game["started"] = True
+    game["word"] = normal_word
+    game["word_impostor"] = impostor_word
+    game["impostor"] = impostor
+
+    return redirect(f"/room/{code}")
+
+# --- URUCHOMIENIE ---
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
