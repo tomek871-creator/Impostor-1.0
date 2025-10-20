@@ -113,7 +113,7 @@ def play(code):
             player["word"] = "IMPOSTOR" if i == impostor_index else game["word"]
 
     player_list = "".join([f"<li>{p['name']}</li>" for p in game["players"]])
-    return render_template_string(PAGE_TEMPLATE + f"""
+    return render_template_string(PAGE_TEMPLATE + """
     {% block content %}
     <h3>Pokój: {code}</h3>
     <div class="card">
@@ -142,7 +142,7 @@ def word(code):
         return redirect(url_for("index"))
 
     word_text = player["word"] or "Czekaj na start..."
-    return render_template_string(PAGE_TEMPLATE + f"""
+    return render_template_string(PAGE_TEMPLATE + """
     {% block content %}
     <div class="card">
         <h3>Twoje słowo:</h3>
