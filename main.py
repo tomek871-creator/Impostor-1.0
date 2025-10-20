@@ -1,54 +1,56 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect
 import random
 
 app = Flask(__name__)
 
-# ----------------------- DANE GRY -----------------------
 games = {}
 
 WORDS = [
-    "kot", "pies", "drzewo", "chleb", "telefon", "auto", "morze", "góry", "szkoła", "nauczyciel",
-    "książka", "las", "słońce", "księżyc", "gwiazda", "samolot", "rower", "krzesło", "stół", "okno",
-    "drzwi", "dach", "komputer", "mysz", "klawiatura", "kubek", "woda", "kawa", "herbata", "cukier",
-    "dom", "pokój", "ogród", "kwiat", "trawa", "miasto", "ulica", "sklep", "kino", "teatr",
-    "muzyka", "piosenka", "gitara", "fortepian", "perkusja", "sport", "piłka", "bramka", "gol", "bieganie",
-    "basen", "rzeka", "jezioro", "plaża", "piasek", "deszcz", "śnieg", "wiatr", "burza", "grzmot",
-    "chmura", "niebo", "lampa", "światło", "ciemność", "noc", "dzień", "poranek", "wieczór", "cień",
-    "piesek", "kotka", "ptak", "ryba", "żaba", "koń", "świnia", "krowa", "owca", "zając",
-    "lis", "niedźwiedź", "wilk", "tygrys", "lew", "słoń", "małpa", "żółw", "pingwin", "krokodyl",
-    "motyl", "pszczoła", "osa", "komar", "mrówka", "pająk", "gąsienica", "biedronka", "delfin", "rekin",
-    "rakieta", "planeta", "kosmos", "robot", "statek", "samochód", "motor", "hulajnoga", "tramwaj", "autobus",
-    "ciężarówka", "metro", "pociąg", "dworzec", "bilet", "portfel", "plecak", "torebka", "klucz", "zamek",
-    "obraz", "lustro", "poduszka", "kołdra", "łóżko", "kanapa", "fotel", "telewizor", "pilot", "radio",
-    "gazeta", "czasopismo", "kartka", "długopis", "ołówek", "linijka", "zeszyt", "plecak", "biurko", "szafka",
-    "szafa", "lód", "zupa", "kanapka", "pizza", "hamburger", "frytki", "ser", "masło", "jajko",
-    "sałatka", "pomidor", "ogórek", "marchewka", "ziemniak", "cebula", "czosnek", "jabłko", "banan", "gruszka",
-    "pomarańcza", "cytryna", "winogrono", "truskawka", "malina", "borówka", "wiśnia", "śliwka", "ananas", "arbuz",
-    "lody", "ciasto", "tort", "cukierek", "czekolada", "baton", "ciastko", "pączek", "drożdżówka", "chlebek",
-    "makaron", "ryż", "mięso", "kurczak", "ryba", "wołowina", "kiełbasa", "kotlet", "szynka", "jogurt",
-    "sernik", "naleśnik", "placki", "pierogi", "zupa pomidorowa", "rosół", "barszcz", "żurek", "gulasz", "sałatka grecka",
-    "biuro", "praca", "szef", "pracownik", "komputer", "drukarka", "monitor", "klawiatura", "myszka", "biurko",
-    "szkoła", "uczeń", "nauczyciel", "klasa", "tablica", "kreda", "zeszyt", "lekcja", "zadanie", "ocena",
-    "wakacje", "ferie", "plaża", "góry", "jezioro", "morze", "wycieczka", "podróż", "hotel", "walizka",
-    "bilet", "paszport", "samolot", "lotnisko", "statek", "autobus", "tramwaj", "metro", "pociąg", "taksówka",
-    "rower", "motor", "hulajnoga", "buty", "spodnie", "koszulka", "kurtka", "czapka", "szalik", "rękawiczki",
-    "sukienka", "spódnica", "bluza", "sweter", "skarpetki", "buty sportowe", "klapki", "sandały", "marynarka", "garnitur",
-    "ubranie", "odzież", "płaszcz", "kurtka zimowa", "torba", "plecak", "portfel", "zegarek", "bransoletka", "naszyjnik",
-    "kolczyki", "pierścionek", "czapka z daszkiem", "okulary", "okulary przeciwsłoneczne", "telefon", "tablet", "laptop", "komputer", "monitor",
-    "drukarka", "głośnik", "słuchawki", "mikrofon", "kamera", "mysz", "klawiatura", "pendrive", "dysk", "internet",
-    "strona", "gra", "film", "muzyka", "piosenka", "artysta", "aktor", "piosenkarz", "youtuber", "bloger",
-    "taniec", "śpiew", "koncert", "festiwal", "scena", "publiczność", "mikrofon", "gitara", "perkusja", "fortepian",
-    "obraz", "malarz", "rzeźba", "muzeum", "galeria", "teatr", "aktor", "reżyser", "kamera", "film",
-    "serial", "odcinek", "scena", "dialog", "scenariusz", "kostium", "charakteryzacja", "muzyka filmowa", "napisy", "plakat",
-    "miłość", "przyjaźń", "radość", "złość", "smutek", "strach", "nadzieja", "tęsknota", "zazdrość", "śmiech",
-    "łzy", "uczucia", "emocje", "marzenie", "sen", "myśl", "pomysł", "plan", "cel", "sukces",
-    "porażka", "walka", "gra", "zabawa", "zwycięstwo", "nagroda", "prezent", "niespodzianka", "święta", "urodziny",
-    "impreza", "taniec", "muzyka", "zabawa", "ciasto", "balony", "dekoracje", "świeczki", "życzenia", "goście",
-    "rodzina", "rodzice", "dziecko", "brat", "siostra", "dziadek", "babcia", "wujek", "ciocia", "kuzyn",
-    "przyjaciel", "kolega", "znajomy", "sąsiad", "student", "nauczyciel", "doktor", "pielęgniarka",
-    "lekarz", "dentysta", "weterynarz", "policjant", "strażak", "żołnierz", "pilot", "kelner", "kucharz", "mechanik",
-    "informatyk", "programista", "sprzedawca", "muzyk", "malarz", "aktor", "pisarz", "reżyser", "fotograf", "naukowiec"
+    # 🟢 CODZIENNE, ŁATWIEJSZE (175)
+    "kot", "pies", "królik", "koń", "ryba", "żaba", "ptak", "mysz", "owca", "koza",
+    "świnia", "krowa", "kurczak", "gęś", "kaczka", "lis", "jeleń", "słoń", "tygrys", "lew",
+    "panda", "pingwin", "delfin", "rekin", "żółw", "małpa", "miś", "zając", "motyl", "biedronka",
+    "dom", "pokój", "okno", "drzwi", "lampa", "łóżko", "kanapa", "krzesło", "stół", "dywan",
+    "szafa", "telewizor", "pilot", "komputer", "telefon", "laptop", "mysz", "klawiatura", "kubek", "talerz",
+    "widelec", "łyżka", "nóż", "patelnia", "czajnik", "zlew", "garnek", "pralka", "lustro", "zegar",
+    "szkoła", "klasa", "uczeń", "nauczyciel", "zeszyt", "piórnik", "ołówek", "długopis", "linijka", "plecak",
+    "książka", "biblioteka", "tablica", "lekcja", "zadanie", "boisko", "piłka", "bramka", "trener", "mecz",
+    "sport", "bieganie", "pływanie", "taniec", "muzyka", "piosenka", "gitara", "bęben", "fortepian", "flet",
+    "film", "aktor", "reżyser", "mikrofon", "kamera", "scena", "światło", "teatr", "kino", "widownia",
+    "las", "drzewo", "kwiat", "trawa", "rzeka", "jezioro", "morze", "plaża", "piasek", "kamień",
+    "góra", "chmura", "słońce", "księżyc", "gwiazda", "deszcz", "śnieg", "burza", "tęcza", "wiatr",
+    "miasto", "wieś", "sklep", "restauracja", "hotel", "kościół", "poczta", "zoo", "muzeum", "rynek",
+    "samochód", "rower", "autobus", "pociąg", "tramwaj", "samolot", "statek", "hulajnoga", "bilet", "walizka",
+    "dzień", "noc", "poranek", "wieczór", "wakacje", "urodziny", "prezent", "tort", "balon", "świeczka",
+    "cukierek", "ciasto", "lody", "czekolada", "kanapka", "zupa", "pizza", "makaron", "jajko", "chleb",
+    "ser", "jabłko", "banan", "truskawka", "malina", "gruszka", "pomidor", "ogórek", "ziemniak", "marchewka",
+    "mama", "tata", "brat", "siostra", "babcia", "dziadek", "ciocia", "wujek", "kuzyn", "kuzynka",
+    "przyjaciel", "kolega", "koleżanka", "rodzina", "dziecko", "sąsiad", "zwierzak", "piesek", "kotek", "domownik",
+
+    # 🔵 POWAŻNIEJSZE / CIEKAWSZE (175)
+    "astronauta", "kosmos", "planeta", "galaktyka", "gwiazdozbiór", "czarna dziura", "kometa", "rakieta", "satelita", "teleskop",
+    "naukowiec", "fizyka", "chemia", "biologia", "mikroskop", "eksperyment", "atom", "energia", "elektryczność", "magnes",
+    "robot", "sztuczna inteligencja", "programista", "inżynier", "architekt", "projekt", "mechanizm", "silnik", "technologia", "komunikacja",
+    "system", "internet", "hasło", "dane", "plik", "sieć", "kod", "baza danych", "algorytm", "oprogramowanie",
+    "muzeum nauki", "obserwatorium", "laboratorium", "badanie", "eksperyment", "odkrycie", "wynalazek", "historia", "prehistoria", "cywilizacja",
+    "państwo", "rząd", "prezydent", "konstytucja", "prawo", "wolność", "obywatel", "społeczeństwo", "gospodarka", "ekonomia",
+    "bank", "pieniądz", "handel", "transakcja", "biznes", "firma", "produkt", "reklama", "technologia", "wynalazca",
+    "architektura", "budowla", "most", "wieżowiec", "zamek", "katedra", "pomnik", "rzeźba", "malarstwo", "galeria",
+    "malarz", "rzeźbiarz", "muzyk", "dyrygent", "piosenkarz", "poeta", "pisarz", "aktor teatralny", "reżyser filmowy", "producent",
+    "wojna", "pokój", "bitwa", "żołnierz", "strategia", "sojusz", "armia", "dowódca", "obrona", "atak",
+    "planeta", "ekosystem", "klimat", "pogoda", "globalne ocieplenie", "energia słoneczna", "wiatrak", "elektrownia", "paliwo", "elektryk",
+    "mechanik", "lekarz", "chirurg", "dentysta", "farmaceuta", "weterynarz", "psycholog", "ratownik", "nauczyciel akademicki", "profesor",
+    "bibliotekarz", "historyk", "geograf", "astronom", "biotechnolog", "chemik", "fizyk", "matematyk", "filozof", "językoznawca",
+    "kamera", "mikrofon", "nagranie", "produkcja", "studio", "radio", "telewizja", "gazeta", "redaktor", "dziennikarz",
+    "reportaż", "informacja", "komentarz", "recenzja", "dyskusja", "debat", "argument", "opinia", "krytyk", "narrator",
+    "polityka", "partia", "wybory", "kampania", "prezentacja", "spotkanie", "konferencja", "plan", "projekt", "cel",
+    "marzenie", "inspiracja", "motywacja", "odwaga", "cierpliwość", "zaufanie", "nadzieja", "przyszłość", "kariera", "sukces",
+    "porażka", "nauka", "próba", "postęp", "zmiana", "rozwiązanie", "technika", "innowacja", "wizja", "strategia",
+    "światło", "energia", "fala", "dźwięk", "laser", "obraz", "piksel", "kamera termowizyjna", "drukarka 3D", "czujnik",
+    "system bezpieczeństwa", "kod QR", "hasło dostępu", "konto użytkownika", "serwer", "aplikacja", "program", "symulator", "grafika", "model 3D",
+    "robotyka", "cyberbezpieczeństwo", "sztuka nowoczesna", "ekologia", "recykling", "zrównoważony rozwój", "elektromobilność", "satelita", "mikrochip", "biometria"
 ]
+
 
 # ----------------------- STRONA GŁÓWNA -----------------------
 @app.route("/")
@@ -75,7 +77,7 @@ def index():
                 <button type="submit">🆕 Stwórz grę</button>
             </form>
             <hr style="margin: 20px 0; opacity: 0.3;">
-            <form action="/room" method="get">
+            <form action="/join" method="get">
                 <p>Lub dołącz do istniejącego pokoju:</p>
                 <input name="room" placeholder="Kod pokoju" required>
                 <button type="submit">➡️ Dołącz</button>
@@ -84,6 +86,14 @@ def index():
     </body>
     </html>
     """)
+
+# ----------------------- DOŁĄCZANIE DO POKOJU -----------------------
+@app.route("/join")
+def join():
+    room = request.args.get("room", "").strip().upper()
+    if not room:
+        return "❌ Podaj kod pokoju!"
+    return redirect(f"/room/{room}")
 
 # ----------------------- TWORZENIE GRY -----------------------
 @app.route("/create", methods=["POST"])
@@ -96,7 +106,7 @@ def create_game():
         return f"❌ Pokój {room} już istnieje."
 
     games[room] = {
-        "word": None,
+        "word": random.choice(WORDS),
         "players": [],
         "impostor": None
     }
@@ -119,12 +129,7 @@ def join_room(room):
     players = len(game["players"])
 
     if players >= 8:
-        return render_template_string(f"""
-        <html><body style="text-align:center; font-family:Arial; margin-top:10%">
-            <h2>🛑 Pokój {room} jest pełny (8/8 graczy).</h2>
-            <a href="/">⬅️ Wróć</a>
-        </body></html>
-        """)
+        return f"🛑 Pokój {room} jest pełny (8/8 graczy)."
 
     return render_template_string(f"""
     <html>
@@ -163,8 +168,8 @@ def play(room):
     if player not in game["players"]:
         game["players"].append(player)
 
+    # Start gry dopiero od 3 graczy
     if len(game["players"]) >= 3 and game["impostor"] is None:
-        game["word"] = random.choice(WORDS)
         game["impostor"] = random.choice(game["players"])
 
     if len(game["players"]) < 3:
@@ -197,7 +202,6 @@ def play(room):
         <p>Twoje słowo:</p>
         <p class="word">{word}</p>
         <form action="/new_round/{room}" method="post">
-            <input type="hidden" name="player" value="{player}">
             <button type="submit">🔁 Zagraj ponownie</button>
         </form>
     </body>
@@ -209,38 +213,20 @@ def play(room):
 def new_round(room):
     if room not in games:
         return "❌ Pokój nie istnieje."
-
+    
     game = games[room]
-    player = request.form["player"]
 
-    if player not in game["players"]:
-        game["players"].append(player)
-
+    # Reset impostora, wylosuj nowe słowo, ale zachowaj graczy
     game["word"] = random.choice(WORDS)
-    game["impostor"] = random.choice(game["players"])
-
-    if player == game["impostor"]:
-        word = "IMPOSTOR"
-    else:
-        word = game["word"]
-
+    if game["players"]:
+        game["impostor"] = random.choice(game["players"])
+    
     return render_template_string(f"""
-    <html>
-    <head>
-        <title>Nowa runda</title>
-        <style>
-            body {{ background-color: #000; color: #fff; text-align: center; font-family: Arial; margin-top: 15%; }}
-            .word {{ font-size: 2em; color: #4caf50; }}
-            a {{ display: inline-block; margin-top: 20px; color: #03a9f4; text-decoration: none; }}
-        </style>
-    </head>
-    <body>
-        <h1>Gracz: {player}</h1>
-        <p>Twoje słowo:</p>
-        <p class="word">{word}</p>
-        <a href="/room/{room}">⬅️ Wróć do pokoju</a>
-    </body>
-    </html>
+    <html><body style="text-align:center; font-family:Arial; margin-top:10%">
+        <h2>🔄 Nowa runda w pokoju {room}!</h2>
+        <p>Impostor i słowo zostały zmienione.</p>
+        <a href="/room/{room}">➡️ Wracaj do gry</a>
+    </body></html>
     """)
 
 # ----------------------- START APLIKACJI -----------------------
