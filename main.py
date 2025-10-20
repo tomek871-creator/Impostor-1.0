@@ -1,136 +1,151 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, redirect, url_for, render_template_string, jsonify
 import random
+import json
+import os
 
 app = Flask(__name__)
 
-# ---------------- SŁOWA ----------------
+DATA_FILE = "/tmp/games.json"
+
+# -----------------------------
+# Pomocnicze funkcje zapisu i wczytania danych
+# -----------------------------
+def load_games():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_games(games):
+    with open(DATA_FILE, "w") as f:
+        json.dump(games, f)
+
+# -----------------------------
+# Lista słów (mix łatwe + poważniejsze)
+# -----------------------------
 WORDS = [
-    "kot", "pies", "dom", "rower", "szkoła", "komputer", "telefon", "statek", "góry", "morze",
-    "tęcza", "drzewo", "samolot", "krzesło", "biurko", "okno", "książka", "film", "muzyka", "zamek",
-    "chleb", "ser", "pomidor", "kawa", "herbata", "czekolada", "śnieg", "słońce", "chmura", "wiatr",
-    "taniec", "kosmos", "las", "ogród", "jabłko", "szpital", "traktor", "boisko", "piłka", "kino",
-    "nauczyciel", "aktor", "żołnierz", "malarka", "dentysta", "programista", "muzyk", "architekt", "kucharz", "pilot",
-    "samochód", "hulajnoga", "motor", "sklep", "most", "wieża", "zamek", "zamek błyskawiczny", "pociąg", "metro",
-    "niedźwiedź", "lew", "tygrys", "słoń", "foka", "żaba", "panda", "pingwin", "królik", "lis",
-    "zegar", "radio", "telewizor", "pióro", "plecak", "kubek", "butelka", "talerz", "nóż", "łyżka",
-    "planeta", "robot", "dinozaur", "kometa", "miasto", "wieś", "państwo", "rzeka", "jezioro", "wyspa",
-    "burza", "księżyc", "gwiazda", "słońce", "noc", "dzień", "poranek", "wieczór", "sen", "marzenie",
-    "matematyka", "język", "historia", "geografia", "fizyka", "chemia", "muzyka", "sztuka", "sport", "gra",
-    "mecz", "bramka", "trener", "piłkarz", "koszykówka", "tenis", "bieganie", "pływanie", "jazda", "skok",
-    "zima", "lato", "wiosna", "jesień", "wakacje", "ferie", "święta", "urodziny", "tort", "prezent",
-    "książę", "królowa", "czarodziej", "smok", "rycerz", "elf", "duch", "zombie", "robot", "kosmita",
-    "prawda", "marzenie", "radość", "strach", "nadzieja", "pokój", "wojna", "cisza", "hałas", "czas",
-    "przyjaciel", "rodzina", "brat", "siostra", "mama", "tata", "babcia", "dziadek", "kolega", "koleżanka",
-    "plan", "projekt", "pomysł", "zadanie", "gra", "zabawa", "misja", "podróż", "przygoda", "sekret",
-    "energia", "światło", "dźwięk", "cień", "ciepło", "zimno", "ogień", "woda", "powietrze", "ziemia",
-    "granat", "rakieta", "mikroskop", "kompas", "zegarek", "latarka", "aparat", "kamera", "lornetka", "telefon",
-    "internet", "robotyka", "sztuka", "technologia", "planeta", "program", "dane", "system", "gra", "muzyka",
-    "teatr", "film", "aktor", "kamera", "scena", "widownia", "mikrofon", "piosenka", "melodia", "taniec",
-    "serce", "rozum", "emocja", "szczęście", "radość", "złość", "miłość", "strach", "sen", "spokój"
+    "kot", "pies", "rower", "telefon", "lampa", "drzewo", "książka", "samolot", "okno", "zegarek",
+    "pociąg", "torba", "pilot", "długopis", "szkoła", "biurko", "krzesło", "łóżko", "kubek", "plecak",
+    "czekolada", "kino", "basen", "mleko", "chleb", "dom", "most", "kwiat", "wiatrak", "herbata",
+    "lekarz", "muzyk", "aktor", "strażak", "policjant", "nauczyciel", "architekt", "astronauta",
+    "adwokat", "malarz", "mechanik", "rolnik", "kucharz", "programista", "pilot", "żeglarz",
+    "bibliotekarz", "weterynarz", "artysta", "dziennikarz", "inżynier", "sportowiec", "fotograf",
+    "psycholog", "chemik", "geolog", "filozof", "naukowiec", "dyrektor", "polityk", "prezydent",
+    "aktor", "projektant", "muzyk", "sędzia", "trener", "pisarz", "kompozytor", "poeta",
+    "ekonomista", "dentysta", "chirurg", "fizyk", "prawnik", "historyk", "astronom",
 ]
 
-# ---------------- GRA ----------------
-games = {}
-
+# -----------------------------
+# Strona główna
+# -----------------------------
 @app.route("/")
 def index():
     return render_template_string("""
     <html><body style='text-align:center; font-family:Arial; margin-top:10%'>
-        <h1>🎭 Impostor Game</h1>
-        <form action="/create" method="post">
-            <input name="room" placeholder="Kod pokoju" required>
-            <button type="submit">Stwórz pokój</button>
-        </form>
-        <hr>
-        <form action="/room" method="get">
-            <input name="room" placeholder="Kod pokoju" required>
+        <h2>🎭 Gra: Impostor</h2>
+        <form action="/create_room" method="post">
+            <button type="submit">Utwórz pokój</button>
+        </form><br>
+        <form action="/join_room" method="post">
+            <input name="code" placeholder="Kod pokoju" required>
             <button type="submit">Dołącz</button>
         </form>
     </body></html>
     """)
 
-@app.route("/create", methods=["POST"])
-def create_game():
-    room = request.form["room"].strip().upper()
-    if room in games:
-        return f"❌ Pokój {room} już istnieje."
-    games[room] = {"word": random.choice(WORDS), "players": 0, "impostor": None, "started": False}
+# -----------------------------
+# Tworzenie pokoju
+# -----------------------------
+@app.route("/create_room", methods=["POST"])
+def create_room():
+    games = load_games()
+    room_code = ''.join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ123456789", k=5))
+    games[room_code] = {"players": [], "word": random.choice(WORDS), "impostor": None}
+    save_games(games)
+    link = f"{request.host_url}room/{room_code}"
     return render_template_string(f"""
     <html><body style='text-align:center; font-family:Arial; margin-top:10%'>
-        <h2>✅ Pokój {room} utworzony!</h2>
-        <p>Podziel się tym kodem ze znajomymi.</p>
-        <a href="/room/{room}">➡️ Przejdź do lobby</a>
+        <h2>✅ Pokój {room_code} utworzony!</h2>
+        <p>Podziel się tym linkiem ze znajomymi:</p>
+        <p><a href="{link}" target="_blank">{link}</a></p>
     </body></html>
     """)
 
+# -----------------------------
+# Dołączanie do pokoju
+# -----------------------------
+@app.route("/join_room", methods=["POST"])
+def join_room():
+    code = request.form["code"].strip().upper()
+    return redirect(url_for("room", room=code))
+
+# -----------------------------
+# Widok pokoju (lobby + gra)
+# -----------------------------
 @app.route("/room/<room>")
-def join_room(room):
+def room(room):
+    games = load_games()
     if room not in games:
-        return "❌ Pokój nie istnieje."
+        return "<h3>❌ Pokój nie istnieje</h3>", 404
+
+    ip = request.remote_addr
     game = games[room]
-    return render_template_string(f"""
-    <html><body style='text-align:center; font-family:Arial; margin-top:10%'>
-        <h2>Pokój: {room}</h2>
-        <p>Gracze w pokoju: {game["players"]}/8</p>
-        <form action="/play/{room}" method="post">
-            <button type="submit">Dołącz do gry</button>
-        </form>
-        <br>
-        <a href="/room/{room}">🔁 Odśwież</a>
-    </body></html>
-    """)
 
-@app.route("/play/<room>", methods=["POST"])
-def play(room):
-    if room not in games:
-        return "❌ Pokój nie istnieje."
-    game = games[room]
-    game["players"] += 1
-    player_id = game["players"]
+    # Dodaj gracza jeśli nie ma
+    if ip not in game["players"]:
+        if len(game["players"]) < 10:
+            game["players"].append(ip)
+            save_games(games)
 
-    # GRA STARTUJE gdy 3+ graczy
-    if game["players"] >= 3 and not game["started"]:
-        game["started"] = True
-        game["impostor"] = random.randint(1, game["players"])
+    # Losowanie impostora przy >= 3 graczach
+    if len(game["players"]) >= 3 and game["impostor"] is None:
+        game["impostor"] = random.choice(game["players"])
+        save_games(games)
 
-    if not game["started"]:
+    # Jeśli gra się zaczęła
+    if game["impostor"] is not None:
+        if ip == game["impostor"]:
+            word = "❓ Jesteś IMPOSTOREM! Spróbuj udawać, że znasz słowo."
+        else:
+            word = f"🧩 Twoje słowo: <b>{game['word']}</b>"
         return render_template_string(f"""
         <html><body style='text-align:center; font-family:Arial; margin-top:10%'>
-            <h2>🕐 Czekamy na więcej graczy...</h2>
-            <p>W pokoju {game["players"]}/3+</p>
-            <a href="/room/{room}">🔁 Odśwież</a>
+            <h3>Pokój {room}</h3>
+            <p>{word}</p>
+            <p>Liczba graczy: {len(game['players'])}</p>
+            <form action="/reset/{room}" method="post">
+                <button type="submit">Zagraj ponownie</button>
+            </form>
         </body></html>
         """)
 
-    # przypisanie słowa
-    word = "IMPOSTOR" if player_id == game["impostor"] else game["word"]
-
+    # Jeśli czekamy na więcej graczy
     return render_template_string(f"""
     <html><body style='text-align:center; font-family:Arial; margin-top:10%'>
-        <h1>Gracz {player_id}</h1>
-        <p>Twoje słowo:</p>
-        <h2 style="color:lightgreen;">{word}</h2>
-        <form action="/new_round/{room}" method="post">
-            <button type="submit">🔁 Nowa runda</button>
-        </form>
+        <h3>Pokój {room}</h3>
+        <p>Liczba graczy: <span id='count'>{len(game['players'])}</span></p>
+        <button onclick="location.reload()">🔄 Odśwież</button>
+        <p>Czekamy aż będą co najmniej 3 osoby...</p>
     </body></html>
     """)
 
-@app.route("/new_round/<room>", methods=["POST"])
-def new_round(room):
-    if room not in games:
-        return "❌ Pokój nie istnieje."
-    game = games[room]
-    game["word"] = random.choice(WORDS)
-    game["impostor"] = random.randint(1, game["players"])
-    game["started"] = True
-    return render_template_string(f"""
-    <html><body style='text-align:center; font-family:Arial; margin-top:10%'>
-        <h2>🔄 Nowa runda w pokoju {room}!</h2>
-        <p>Nowe słowo i impostor zostały wylosowane.</p>
-        <a href="/room/{room}">➡️ Wracaj do lobby</a>
-    </body></html>
-    """)
+# -----------------------------
+# Reset gry (nowa runda)
+# -----------------------------
+@app.route("/reset/<room>", methods=["POST"])
+def reset(room):
+    games = load_games()
+    if room in games:
+        games[room]["word"] = random.choice(WORDS)
+        games[room]["impostor"] = None
+        save_games(games)
+    return redirect(url_for("room", room=room))
 
+# -----------------------------
+# Uruchomienie
+# -----------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=10000)
