@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect, url_for
 import random
 
 app = Flask(__name__)
@@ -47,6 +47,7 @@ WORDS = [
     "przyjaciel", "kolega", "znajomy", "sąsiad", "dziecko", "uczeń", "student", "nauczyciel", "doktor", "pielęgniarka",
     "lekarz", "dentysta", "weterynarz", "policjant", "strażak", "żołnierz", "pilot", "kelner", "kucharz", "mechanik",
     "informatyk", "programista", "sprzedawca", "muzyk", "malarz", "aktor", "pisarz", "reżyser", "fotograf", "naukowiec"
+
 ]
 
 # ----------------------- STRONA GŁÓWNA -----------------------
@@ -59,7 +60,7 @@ def index():
         <style>
             body { background-color: #121212; color: white; text-align: center; font-family: Arial; margin-top: 10%; }
             input, button { padding: 10px; border-radius: 8px; border: none; margin: 5px; }
-            input { width: 200px; }
+            input { width: 200px; text-transform: uppercase; }
             button { background-color: #03a9f4; color: white; cursor: pointer; }
             button:hover { background-color: #0288d1; }
             .box { background-color: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; }
@@ -74,7 +75,7 @@ def index():
                 <button type="submit">🆕 Stwórz grę</button>
             </form>
             <hr style="margin: 20px 0; opacity: 0.3;">
-            <form action="/room" method="get">
+            <form onsubmit="event.preventDefault(); window.location.href='/room/' + this.room.value.toUpperCase();">
                 <p>Lub dołącz do istniejącego pokoju:</p>
                 <input name="room" placeholder="Kod pokoju" required>
                 <button type="submit">➡️ Dołącz</button>
@@ -103,7 +104,8 @@ def create_game():
     return render_template_string(f"""
     <html><body style="text-align:center; font-family:Arial; margin-top:10%">
         <h2>✅ Pokój {room} utworzony!</h2>
-        <p>Podziel się tym kodem ze znajomymi.</p>
+        <p>Podziel się tym linkiem ze znajomymi:</p>
+        <p><b>{{{{ request.host_url }}}}room/{room}</b></p>
         <a href="/room/{room}">➡️ Przejdź do pokoju</a>
     </body></html>
     """)
@@ -111,6 +113,7 @@ def create_game():
 # ----------------------- WEJŚCIE DO POKOJU -----------------------
 @app.route("/room/<room>")
 def join_room(room):
+    room = room.upper()
     if room not in games:
         return "❌ Pokój nie istnieje."
 
@@ -153,6 +156,7 @@ def join_room(room):
 # ----------------------- ROZPOCZĘCIE GRY -----------------------
 @app.route("/play/<room>", methods=["POST"])
 def play(room):
+    room = room.upper()
     if room not in games:
         return "❌ Pokój nie istnieje."
     
@@ -178,10 +182,7 @@ def play(room):
         </body></html>
         """)
 
-    if player == game["impostor"]:
-        word = "IMPOSTOR"
-    else:
-        word = game["word"]
+    word = "IMPOSTOR" if player == game["impostor"] else game["word"]
 
     return render_template_string(f"""
     <html>
@@ -208,6 +209,7 @@ def play(room):
 # ----------------------- NOWA RUNDA -----------------------
 @app.route("/new_round/<room>", methods=["POST"])
 def new_round(room):
+    room = room.upper()
     if room not in games:
         return "❌ Pokój nie istnieje."
     
@@ -225,4 +227,5 @@ def new_round(room):
 
 # ----------------------- START APLIKACJI -----------------------
 if __name__ == "__main__":
+    # Ustaw host na 0.0.0.0, żeby Flask był dostępny z zewnątrz
     app.run(host="0.0.0.0", port=5000)
