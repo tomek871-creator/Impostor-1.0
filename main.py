@@ -6,10 +6,38 @@ app = Flask(__name__)
 
 # ------------------- DANE -------------------
 WORDS = [
-    "pies", "kot", "samochód", "rower", "dom", "telefon", "książka", "chleb",
-    "szkoła", "kino", "komputer", "okno", "las", "morze", "zegar", "jabłko",
-    "herbata", "kawa", "gitara", "muzyka", "taniec", "sport", "piłka", "krzesło"
+"pies", "kot", "samochód", "rower", "dom", "telefon", "książka", "chleb", "szkoła", "kino",
+"komputer", "okno", "las", "morze", "zegar", "jabłko", "herbata", "kawa", "gitara", "muzyka",
+"taniec", "sport", "piłka", "krzesło", "lampa", "zamek", "kwiat", "plaża", "śnieg", "góra",
+"samolot", "pociąg", "autobus", "talerz", "widelec", "łyżka", "nóż", "król", "królowa", "książę",
+"księżniczka", "bałwan", "śnieżka", "rzeka", "jezioro", "wyspa", "most", "droga", "miasto",
+"wieś", "ogród", "drzewo", "trawa", "kwiat", "liść", "ptak", "ryba", "piesek", "kotka", "mysz",
+"szkoła", "nauczyciel", "uczeń", "klasa", "tablica", "kreda", "zeszyt", "długopis", "ołówek",
+"książka", "strona", "zdjęcie", "aparat", "kamera", "film", "aktor", "aktorka", "scena", "kurtyna",
+"teatr", "piosenka", "piosenkarz", "piosenkarka", "muzyk", "bęben", "fortepian", "skrzypce",
+"trąbka", "gitara", "harfa", "mikrofon", "słuchawki", "radio", "telewizor", "ekran", "komórka",
+"internet", "strona", "hasło", "gra", "myszka", "klawiatura", "drukarka", "biurko", "krzesło",
+"szafa", "stół", "łóżko", "lampa", "okno", "firanka", "drzwi", "ściana", "obraz", "lustro",
+"dywan", "podłoga", "sufit", "żarówka", "bateria", "ładowarka", "pilot", "przycisk", "torba",
+"plecak", "buty", "czapka", "szalik", "rękawiczki", "kurtka", "spodnie", "koszulka", "bluza",
+"sukienka", "spódnica", "pasek", "zegarek", "bransoletka", "pierścionek", "naszyjnik", "kolczyk",
+"portfel", "pieniądze", "moneta", "banknot", "sklep", "kasa", "sprzedawca", "klient", "paragon",
+"zakupy", "torba", "koszyk", "promocja", "rabat", "produkt", "półka", "mleko", "chleb", "masło",
+"ser", "szynka", "pomidor", "ogórek", "ziemniak", "marchewka", "jabłko", "banan", "truskawka",
+"malina", "wiśnia", "czereśnia", "winogrono", "arbuz", "cytryna", "pomarańcza", "brzoskwinia",
+"śliwka", "gruszka", "ananas", "kokos", "kwiat", "róża", "tulipan", "słonecznik", "stokrotka",
+"fiołek", "lawenda", "drzewo", "sosna", "świerk", "dąb", "brzoza", "jabłoń", "grusza", "liść",
+"gałąź", "pień", "korzeń", "ptak", "gołąb", "wróbel", "sroka", "wrona", "kruk", "kura", "kogut",
+"kaczka", "gęś", "indyk", "struś", "pingwin", "słoń", "lew", "tygrys", "zebra", "żyrafa",
+"hipopotam", "nosorożec", "małpa", "goryl", "lampart", "wilk", "lis", "jeż", "niedźwiedź",
+"panda", "koń", "krowa", "świnia", "owca", "koza", "królik", "chomik", "mysz", "żaba", "wąż",
+"żółw", "delfin", "rekin", "wieloryb", "konik morski", "krab", "rak", "ośmiornica", "meduza",
+"gwiazda", "planeta", "słońce", "księżyc", "ziemia", "mars", "gwiazdy", "teleskop", "rakieta",
+"astronauta", "statek", "żagiel", "kotwica", "fala", "burza", "deszcz", "wiatr", "śnieg",
+"lód", "chmura", "niebo", "słońce", "księżyc", "tęcza", "noc", "dzień", "pora roku", "wiosna",
+"lato", "jesień", "zima"
 ]
+
 
 games = {}
 
