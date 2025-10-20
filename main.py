@@ -106,17 +106,30 @@ def room_lobby(room):
     return resp
 
 # ------------------ START GRY ------------------
-@app.route("/start/<room>", methods=["POST"])
-def start_game(room):
-    if room not in games:
-        return "❌ Pokój nie istnieje."
-    game = games[room]
-    if len(game["players"]) < 3:
-        return "❗ Potrzeba co najmniej 3 graczy."
+@app.route('/start/<code>', methods=['POST'])
+def start_game(code):
+    if code not in games:
+        return "Pokój nie istnieje", 404
 
+    game = games[code]
+
+    # minimalna liczba graczy
+    if len(game["players"]) < 3:
+        return "Potrzeba co najmniej 3 graczy", 400
+
+    # 🧩 zawsze ustaw słowo przy starcie gry, nawet jeśli było None
+    if not game.get("word"):
+        game["word"] = random.choice(WORDS)
+
+    # losuj impostora spośród aktualnych graczy
+    game["impostor"] = random.choice(game["players"])
+
+    # oznacz, że gra wystartowała
     game["started"] = True
-    game["impostor"] = random.choice(list(game["players"]))
-    return redirect(f"/play/{room}")
+
+    # przekieruj hosta do ekranu gry
+    return redirect(f"/play/{code}")
+
 
 # ------------------ EKRAN GRY ------------------
 @app.route("/play/<room>")
