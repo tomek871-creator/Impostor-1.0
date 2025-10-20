@@ -1,6 +1,7 @@
-from flask import Flask, render_template_string, request, redirect, url_for
+from flask import Flask, render_template_string, request, redirect, url_for, make_response
 import random
 import string
+import uuid
 
 app = Flask(__name__)
 
@@ -8,7 +9,7 @@ app = Flask(__name__)
 WORDS = [
     "pies", "kot", "samochód", "książka", "telefon", "komputer", "drzewo", "krzesło", "kwiat", "morze",
     "szkoła", "film", "pociąg", "samolot", "księżyc", "słońce", "muzyka", "las", "dom", "buty",
-    "pociąg", "szpital", "muzeum", "ogród", "taniec", "mleko", "ryba", "rower", "talerz", "lampa",
+    "szpital", "muzeum", "ogród", "taniec", "mleko", "ryba", "rower", "talerz", "lampa",
     "kosmos", "podróż", "ciasto", "kuchnia", "miasto", "wieża", "teatr", "kościół", "rzeka", "burza",
     "minister", "nauczyciel", "architekt", "dokument", "system", "ekonomia", "konflikt", "prawo", "wolność", "kultura",
     "strategia", "dyskusja", "społeczeństwo", "nauka", "technologia", "projekt", "artysta", "poeta", "muzyk", "aktor"
@@ -17,113 +18,196 @@ WORDS = [
 # --- DANE O GRACH ---
 games = {}
 
-# --- STRONA GŁÓWNA ---
-@app.route("/")
-def index():
-    return render_template_string("""
-    <h1>Gra: Impostor</h1>
-    <form action="/create" method="post">
-        <button type="submit">Utwórz pokój</button>
-    </form>
-    <br>
-    <form action="/room" method="post">
-        <input type="text" name="room" placeholder="Kod pokoju" required>
-        <button type="submit">Dołącz</button>
-    </form>
-    """)
+# --- STYL I SZABLON ---
+BASE_HTML = """
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Impostor</title>
+<style>
+  html,body { height:100%; margin:0; font-family:Arial,Helvetica,sans-serif; background:#000; color:#fff; }
+  .wrap{ max-width:900px; margin:24px auto; padding:20px; background: rgba(255,255,255,0.02); border-radius:12px; }
+  input,button { padding:10px; border-radius:8px; border:1px solid #222; background:#111; color:#fff; }
+  .muted{ color:#bbb; font-size:14px; }
+  .players { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+  .player { background:#111; padding:8px 12px; border-radius:8px; border:1px solid #222; }
+  .host-badge { background:#00d084; color:#000; padding:2px 6px; border-radius:999px; font-size:12px; margin-left:8px; }
+  .word { display:inline-block; margin-top:12px; padding:10px 12px; border-radius:10px; background:#0f0; color:#000; font-weight:bold; }
+  .impostor { display:inline-block; margin-top:12px; padding:10px 12px; border-radius:10px; background:#900; color:#fff; font-weight:bold; }
+  .msg { margin-top:12px; padding:8px; background: rgba(255,255,255,0.02); border-radius:8px; }
+  a.btn { text-decoration:none; display:inline-block; padding:8px 12px; border-radius:8px; background:#222; color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  {{ body }}
+</div>
+</body>
+</html>
+"""
 
-# --- UTWORZENIE POKOJU ---
+# --- POMOCNICZE FUNKCJE ---
+def generate_code(n=4):
+    return ''.join(random.choices(string.ascii_uppercase, k=n))
+
+def get_or_set_player_id():
+    pid = request.cookies.get("player_id")
+    if not pid:
+        pid = str(uuid.uuid4())
+    return pid
+
+def find_player(game, pid):
+    return next((p for p in game["players"] if p["id"] == pid), None)
+
+# --- STRONA GŁÓWNA ---
+@app.route("/", methods=["GET"])
+def index():
+    body = """
+    <h1>Gra: Impostor</h1>
+    <p class="muted">Twórz lub dołączaj do pokoi. Gra działa dla 3–8 graczy. Impostor otrzymuje słowo <b>"impostor"</b>.</p>
+
+    <h3>Utwórz pokój</h3>
+    <form action="/create" method="post">
+      <label>Twój nick: <input name="name" required></label>
+      <label>Kod pokoju (opcjonalnie): <input name="code" maxlength="6"></label>
+      <button type="submit">Utwórz</button>
+    </form>
+
+    <h3>Dołącz</h3>
+    <form action="/room" method="post">
+      <label>Twój nick: <input name="name" required></label>
+      <label>Kod pokoju: <input name="room" required></label>
+      <button type="submit">Dołącz</button>
+    </form>
+    """
+    return render_template_string(BASE_HTML, body=body)
+
+# --- TWORZENIE POKOJU ---
 @app.route("/create", methods=["POST"])
 def create():
-    code = ''.join(random.choices(string.ascii_uppercase, k=4))
-    games[code] = {"players": [], "started": False, "word": None, "impostor": None}
-    return redirect(f"/room/{code}?host=1")
+    name = (request.form.get("name") or "Gracz").strip()[:20]
+    req = (request.form.get("code") or "").strip().upper()
+    code = req if req else generate_code()
+    if code in games:
+        return render_template_string(BASE_HTML, body=f"<p>Pokój {code} już istnieje.</p><a href='/' class='btn'>Powrót</a>")
 
-# --- BEZPIECZNE DOŁĄCZENIE (naprawia 'Not Found') ---
-@app.route("/room", methods=["GET", "POST"])
-@app.route("/room/", methods=["GET", "POST"])
-def room_redirect():
-    code = ""
-    if request.method == "POST":
-        code = (request.form.get("room") or "").strip().upper()
-    if not code:
-        code = (request.args.get("room") or "").strip().upper()
-    if not code:
-        return redirect("/")
-    return redirect(f"/room/{code}")
+    pid = get_or_set_player_id()
+    games[code] = {
+        "players": [{"id": pid, "name": name}],
+        "host": pid,
+        "started": False,
+        "word": None,
+        "impostor": None
+    }
+    resp = make_response(redirect(url_for("room", code=code)))
+    resp.set_cookie("player_id", pid, httponly=True)
+    return resp
+
+# --- DOŁĄCZANIE DO POKOJU ---
+@app.route("/room", methods=["POST"])
+def join_redirect():
+    room = (request.form.get("room") or "").strip().upper()
+    name = (request.form.get("name") or "Gracz").strip()[:20]
+    return redirect(url_for("room", code=room, name=name))
 
 # --- STRONA POKOJU ---
 @app.route("/room/<code>")
 def room(code):
-    host = request.args.get("host") == "1"
+    name = (request.args.get("name") or "").strip()[:20]
+    pid = get_or_set_player_id()
 
     if code not in games:
-        return "Pokój nie istnieje."
+        return render_template_string(BASE_HTML, body=f"<h2>Pokój {code} nie istnieje.</h2><a href='/' class='btn'>Powrót</a>")
 
     game = games[code]
 
-    # Rejestracja gracza
-    player_id = request.remote_addr  # unikalne ID = adres IP
-    if player_id not in game["players"]:
-        game["players"].append(player_id)
+    # rejestracja gracza
+    if name and not find_player(game, pid):
+        if len(game["players"]) >= 8:
+            return render_template_string(BASE_HTML, body=f"<p>Pokój {code} jest pełny (max 8).</p><a href='/' class='btn'>Powrót</a>")
+        game["players"].append({"id": pid, "name": name})
 
-    # Jeśli gra już się zaczęła
+    # gra trwa
     if game["started"]:
-        impostor = game["impostor"]
-        if player_id == impostor:
-            word = game["word_impostor"]
+        is_imp = (pid == game["impostor"])
+        if is_imp:
+            word = "<span class='impostor'>Słowo: impostor</span>"
         else:
-            word = game["word"]
-        return render_template_string(f"""
-            <h2>Gra rozpoczęta!</h2>
-            <p>Twoje słowo: <b>{word}</b></p>
-        """)
+            word = f"<span class='word'>Twoje słowo: {game['word']}</span>"
+        body = f"""
+            <h2>Pokój: {code}</h2>
+            <div class='msg'>{word}</div>
+            <p class='muted'>Host: {find_player(game, game['host'])['name']}</p>
+            <a href='/' class='btn'>Wyjdź</a>
+        """
+        resp = make_response(render_template_string(BASE_HTML, body=body))
+        resp.set_cookie("player_id", pid, httponly=True)
+        return resp
 
-    # Jeśli jeszcze nie zaczęła
-    player_count = len(game["players"])
-    players_text = "<br>".join([f"Gracz {i+1}" for i in range(player_count)])
-    start_button = ""
-    if host:
-        start_button = f"""
-            <form action="/start/{code}" method="post">
-                <button type="submit">Rozpocznij grę</button>
+    # lobby
+    players_html = "".join(
+        f"<div class='player'>{p['name']}{' <span class=host-badge>HOST</span>' if p['id']==game['host'] else ''}</div>"
+        for p in game["players"]
+    )
+    start_btn = ""
+    if pid == game["host"]:
+        start_btn = f"""
+            <form action="/start/{code}" method="post" style="display:inline-block;">
+              <button type="submit">Rozpocznij grę</button>
+            </form>
+            <form action="/playagain/{code}" method="post" style="display:inline-block;margin-left:8px;">
+              <button type="submit">Zagraj ponownie</button>
             </form>
         """
-
-    return render_template_string(f"""
+    body = f"""
         <h2>Pokój: {code}</h2>
-        <p>Liczba graczy: {player_count}</p>
-        {players_text}
-        <br>
-        {start_button}
-        <br>
-        <form method="get" action="/room/{code}">
-            <button type="submit">Odśwież</button>
-        </form>
-    """)
+        <p>Liczba graczy: {len(game["players"])} (min 3, max 8)</p>
+        <div class="players">{players_html}</div>
+        <div class="msg">{start_btn}</div>
+        <a href="/" class="btn">Wyjdź</a>
+    """
+    resp = make_response(render_template_string(BASE_HTML, body=body))
+    resp.set_cookie("player_id", pid, httponly=True)
+    return resp
 
-# --- ROZPOCZĘCIE GRY ---
+# --- START GRY ---
 @app.route("/start/<code>", methods=["POST"])
 def start(code):
+    pid = get_or_set_player_id()
     if code not in games:
-        return "Błąd: pokój nie istnieje."
-
+        return "Pokój nie istnieje", 400
     game = games[code]
+    if pid != game["host"]:
+        return "Tylko host może rozpocząć", 403
+    n = len(game["players"])
+    if n < 3:
+        return "Potrzeba minimum 3 graczy", 400
+    if n > 8:
+        return "Maksymalnie 8 graczy", 400
+
+    word = random.choice(WORDS)
+    imp = random.choice(game["players"])["id"]
+    game.update({"started": True, "word": word, "impostor": imp})
+    return redirect(url_for("room", code=code))
+
+# --- ZAGRAJ PONOWNIE ---
+@app.route("/playagain/<code>", methods=["POST"])
+def playagain(code):
+    pid = get_or_set_player_id()
+    if code not in games:
+        return "Pokój nie istnieje", 400
+    game = games[code]
+    if pid != game["host"]:
+        return "Tylko host może rozpocząć ponownie", 403
     if len(game["players"]) < 3:
-        return "Potrzeba co najmniej 3 graczy!"
+        return "Za mało graczy", 400
+    word = random.choice(WORDS)
+    imp = random.choice(game["players"])["id"]
+    game.update({"started": True, "word": word, "impostor": imp})
+    return redirect(url_for("room", code=code))
 
-    # Losowanie słów i impostora
-    impostor = random.choice(game["players"])
-    normal_word = random.choice(WORDS)
-    impostor_word = random.choice([w for w in WORDS if w != normal_word])
-
-    game["started"] = True
-    game["word"] = normal_word
-    game["word_impostor"] = impostor_word
-    game["impostor"] = impostor
-
-    return redirect(f"/room/{code}")
-
-# --- URUCHOMIENIE ---
+# --- START SERWERA ---
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=10000, debug=True)
