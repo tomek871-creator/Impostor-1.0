@@ -1,100 +1,159 @@
-﻿
-import json, os, random
-from kivy.clock import Clock
-from kivy.metrics import dp
-from kivy.lang import Builder
-from kivymd.app import MDApp
-from kivymd.uix.screen import MDScreen
-from kivymd.uix.button import MDRectangleFlatButton, MDFlatButton
-from kivymd.uix.dialog import MDDialog
-from kivymd.uix.snackbar import Snackbar
-from kivymd.uix.list import OneLineListItem
+from flask import Flask, render_template_string, request, redirect, url_for, session
+import random, string, os
 
-CUSTOM_WORDS_FILE = "custom_words.json"
-MAX_ADD = 50
+app = Flask(__name__)
+app.secret_key = "tajnyklucz"  # możesz wpisać cokolwiek
 
-with open("words.json", encoding="utf-8") as f:
-    DEFAULT_WORDS = json.load(f)
+# --- Słowa do gry ---
+WORDS = [
+    "kot", "pies", "samochód", "telefon", "szkoła",
+    "jabłko", "książka", "lampa", "chleb", "dom"
+]
 
-if os.path.exists(CUSTOM_WORDS_FILE):
-    with open(CUSTOM_WORDS_FILE, encoding="utf-8") as f:
-        CUSTOM_WORDS = json.load(f)
-else:
-    CUSTOM_WORDS = []
+# --- Dane gry ---
+games = {}
 
-def get_all_words():
-    return DEFAULT_WORDS + CUSTOM_WORDS
-
-KV = """
-MDScreen:
-    ScreenManager:
-        id: sm
-        MDScreen:
-            name: "lobby"
-            MDBoxLayout:
-                orientation: "vertical"
-                padding: dp(12)
-                spacing: dp(10)
-                MDLabel:
-                    id: lobby_title
-                    text: "Pokój: ---"
-                    halign: "center"
-                MDBoxLayout:
-                    id: players_box
-                    orientation: "vertical"
-                    size_hint_y: None
-                    height: dp(200)
-                MDBoxLayout:
-                    size_hint_y: None
-                    height: dp(48)
-                    spacing: dp(12)
-                    MDRectangleFlatButton:
-                        text: "Start gry"
-                        on_release: app.start_game()
-                    MDRectangleFlatButton:
-                        text: "Dodaj słowa"
-                        on_release: app.add_words()
-                    MDRectangleFlatButton:
-                        text: "Opuść pokój"
-                        on_release: app.leave_room()
+# --- Wygląd strony (HTML + CSS) ---
+PAGE_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impostor — Gra słowna</title>
+<style>
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #121212;
+    color: #f1f1f1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+}
+.container {
+    text-align: center;
+    max-width: 400px;
+    padding: 20px;
+    background: #1e1e1e;
+    border-radius: 20px;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+}
+button {
+    background-color: #03dac6;
+    border: none;
+    padding: 10px 20px;
+    font-size: 18px;
+    border-radius: 10px;
+    margin-top: 15px;
+    cursor: pointer;
+    color: #000;
+}
+button:hover {
+    background-color: #00bfa5;
+}
+input {
+    padding: 10px;
+    width: 80%;
+    border-radius: 8px;
+    border: none;
+    margin-top: 10px;
+}
+a {
+    color: #03dac6;
+    text-decoration: none;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>
 """
 
-class ImpostorApp(MDApp):
-    def build(self):
-        self.root = Builder.load_string(KV)
-        Clock.schedule_once(lambda dt: self.refresh_lobby(), 0)
-        Clock.schedule_interval(lambda dt: self.refresh_lobby(), 1.5)
-        return self.root
+# --- Strona główna ---
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        num_players = int(request.form["players"])
+        game_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        word = random.choice(WORDS)
+        impostor = random.randint(1, num_players)
 
-    def refresh_lobby(self):
-        players_box = self.root.ids.players_box
-        players_box.clear_widgets()
-        for name in ["Host", "Gracz1", "Gracz2"]:
-            item = OneLineListItem(text=name)
-            players_box.add_widget(item)
+        games[game_id] = {
+            "word": word,
+            "players": num_players,
+            "impostor": impostor
+        }
 
-    def start_game(self):
-        word = random.choice(get_all_words())
-        self.show_snackbar(f"Gra wystartowała! Słowo: {word}")
+        return redirect(url_for("lobby", game_id=game_id))
 
-    def add_words(self):
-        new_words = ["jabłko", "gruszka", "herbata"]  # Tu możesz dodać interfejs później
-        if len(new_words) > MAX_ADD:
-            self.show_snackbar(f"Maksymalnie {MAX_ADD} słów naraz.")
+    return render_template_string(PAGE_TEMPLATE + """
+    {% block content %}
+    <h1>🎮 Impostor — Gra słowna</h1>
+    <form method="POST">
+        <p>Podaj liczbę graczy (3–8):</p>
+        <input type="number" name="players" min="3" max="8" required>
+        <br>
+        <button type="submit">Stwórz grę</button>
+    </form>
+    {% endblock %}
+    """)
+
+# --- Lobby gry (link do udostępnienia graczom) ---
+@app.route("/lobby/<game_id>")
+def lobby(game_id):
+    link = request.url_root + "game/" + game_id + "/"
+    return render_template_string(PAGE_TEMPLATE + """
+    {% block content %}
+    <h2>🕹 Kod gry: <span style="color:#03dac6;">{{ game_id }}</span></h2>
+    <p>Udostępnij ten link graczom:</p>
+    <p><a href="{{ link }}">{{ link }}</a></p>
+    <p>Każdy gracz wpisuje ten link i swój numer (1–{{ players }})</p>
+    {% endblock %}
+    """, game_id=game_id, players=games[game_id]["players"], link=link)
+
+# --- Strona gracza ---
+@app.route("/game/<game_id>/", methods=["GET", "POST"])
+def game(game_id):
+    game = games.get(game_id)
+    if not game:
+        return "Gra nie istnieje 😢", 404
+
+    if request.method == "POST":
+        player_num = int(request.form["player"])
+        if player_num == game["impostor"]:
+            word = "IMPOSTOR"
         else:
-            CUSTOM_WORDS.extend(new_words)
-            with open(CUSTOM_WORDS_FILE, "w", encoding="utf-8") as f:
-                json.dump(CUSTOM_WORDS, f, ensure_ascii=False, indent=2)
-            self.show_snackbar(f"Dodano {len(new_words)} słów!")
+            word = game["word"]
 
-    def leave_room(self):
-        self.show_snackbar("Opuściłeś pokój.")
+        return render_template_string(PAGE_TEMPLATE + """
+        {% block content %}
+        <h2>Twoje słowo:</h2>
+        <h1 style="color:#03dac6;">{{ word }}</h1>
+        <p>Nie pokazuj nikomu swojego słowa!</p>
+        <a href="/">🔁 Nowa runda</a>
+        {% endblock %}
+        """, word=word)
 
-    from kivymd.toast import toast
+    return render_template_string(PAGE_TEMPLATE + """
+    {% block content %}
+    <h2>Dołącz do gry</h2>
+    <p>Kod gry: <span style="color:#03dac6;">{{ game_id }}</span></p>
+    <form method="POST">
+        <p>Podaj swój numer gracza (1–{{ players }}):</p>
+        <input type="number" name="player" min="1" max="{{ players }}" required>
+        <br>
+        <button type="submit">Pokaż słowo</button>
+    </form>
+    {% endblock %}
+    """, game_id=game_id, players=game["players"])
 
-def show_snackbar(self, text):
-    toast(text)
-
-
+# --- Uruchomienie na Renderze / lokalnie ---
 if __name__ == "__main__":
-    ImpostorApp().run()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
