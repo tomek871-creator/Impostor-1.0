@@ -20,6 +20,7 @@ WORDS = [
 # ------------------ STRONA GŁÓWNA ------------------
 @app.route("/")
 def index():
+    # Ten formularz DOŁĄCZ zawsze będzie kierował na /room/<KOD>
     return render_template_string("""
     <html>
     <head>
@@ -36,20 +37,62 @@ def index():
     <body>
         <div class="box">
             <h1>🎭 Impostor Game</h1>
-            <form action="/create" method="post">
-                <p>Podaj kod pokoju (np. TEAM5):</p>
-                <input name="room" placeholder="Kod pokoju" required>
-                <button type="submit">🆕 Stwórz grę</button>
+
+            <!-- Tworzenie pokoju: wysyła kod (opcjonalnie), potem redirect do /room/<kod> -->
+            <form id="createForm" action="/create" method="post">
+                <p>Wpisz kod pokoju (opcjonalnie) lub zostaw puste, aby wylosować:</p>
+                <input name="room" placeholder="Kod pokoju (opcjonalnie)">
+                <button type="submit">🆕 Stwórz pokój</button>
             </form>
+
             <hr style="margin: 20px 0; opacity: 0.3;">
+
+            <!-- Dołączanie: JS tworzy poprawny URL /room/XXX (unikniemy /room bez kodu) -->
             <p>Lub dołącz do istniejącego pokoju:</p>
-            <form onsubmit="event.preventDefault(); window.location='/room/' + document.querySelector('[name=room]').value.toUpperCase();">
-                <input name="room" placeholder="Kod pokoju" required>
+            <form id="joinForm" onsubmit="event.preventDefault(); 
+                        const code = document.querySelector('[name=join_room]').value.trim().toUpperCase();
+                        if(!code) return alert('Podaj kod pokoju');
+                        window.location = '/room/' + encodeURIComponent(code);">
+                <input name="join_room" placeholder="Kod pokoju" required>
                 <button type="submit">➡️ Dołącz</button>
             </form>
         </div>
     </body>
     </html>
+    """)
+
+# ----------------- TWORZENIE POKOJU (ZWRACA LINK PEŁNY) -----------------
+@app.route("/create", methods=["POST"])
+def create_game():
+    # Pobierz kod jeśli host go podał — inaczej wylosuj
+    given = request.form.get("room", "").strip().upper()
+    if given:
+        room = given
+    else:
+        room = ''.join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=5))
+
+    # jeśli pokój już istnieje, wylosuj inny (prosty retry)
+    # upewnij się, że używasz tej samej zmiennej `games` co reszta kodu
+    while room in games:
+        room = ''.join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=5))
+
+    games[room] = {
+        "word": random.choice(WORDS),
+        "players": [],
+        "impostor": None,
+        "started": False,
+        "host": None
+    }
+
+    # Zwróć pełny link, żeby host mógł go skopiować i wkleić dla innych
+    link = request.host_url.rstrip("/") + f"/room/{room}"
+    return render_template_string(f"""
+    <html><body style="font-family:Arial;text-align:center;margin-top:40px;">
+        <h2>✅ Pokój utworzony: {room}</h2>
+        <p>Wyślij ten link znajomym (kliknięcie otworzy poprawnie):</p>
+        <p><a href="{link}">{link}</a></p>
+        <p><a href="/">⬅️ Powrót</a></p>
+    </body></html>
     """)
 
 # ------------------ TWORZENIE GRY ------------------
